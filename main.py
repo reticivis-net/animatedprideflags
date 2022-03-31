@@ -44,7 +44,7 @@ class FlagStripe:
 
 class FlagImage:
     def __init__(self, im: typing.Union[pyglet.sprite.Sprite, str], x: float = 0.5, y: float = 0.5, opacity: float = 1,
-                 scale: float = 1, f_type: typing.Literal["center", "left"] = "center"):
+                 scale: float = 1, f_type: typing.Literal["center", "left", "static"] = "center"):
         self.name = "Unknown"
         if isinstance(im, pyglet.sprite.Sprite):
             self.sprite = im
@@ -272,6 +272,19 @@ flags = [
     Flag(["ffffff", "ffffff", "6c016e", "d2d2d2", "d2d2d2"], name="demisexual", reverse=True,
          images=[FlagImage("demisexual-triangle.png", f_type="left")]),
 ]
+# this is a joke
+het_flags = [
+    Flag(["#e40303", "#ff8c00", "#ffed00", "008026", "004dff", "750787"], images=[FlagImage("X.png", f_type="static")],
+         name="gay", reverse=True),
+    Flag(["#3e3e3e", "#ffffff", "#3e3e3e", "#ffffff", "#3e3e3e"], name="straight1", reverse=True),
+    Flag(["f19f32", "000000"], name="superstraight", reverse=True),
+    Flag(["#ffffff", "#878787", "#404040", "#ffffff", "#878787", "#404040", ], name="allo", reverse=True),
+    Flag(["27016c", "27016c", "644f63", "053651", "053651"], name="battleax bi", reverse=True),
+    Flag(["ff79c5", "4d53df"], images=["straight.png"], reverse=True),
+    Flag(["ea4c79", "423f40", "0098c3"], name="truscum", images=["truscum.png"], reverse=True),
+    Flag(["db0170", "0705a4"], name="cis", reverse=True),
+]
+
 current_time = 0
 frame = 0
 print([str(f) for f in flags])
