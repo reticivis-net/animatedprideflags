@@ -1,7 +1,8 @@
-import copy
 import math
+import os.path
 import typing
 from typing import List, Tuple
+
 import bezier
 import numpy as np
 import pyglet
@@ -15,26 +16,72 @@ window = pyglet.window.Window(vsync=1, config=config, width=500, height=500, vis
 
 
 class FlagStripe:
+    """
+    :param color: 3 int tuple RGB of flag color
+    :param size: float 0-1 of flag % of height
+    """
+
     def __str__(self):
         return f"<FlagStripe color={self.color} size={self.size}>"
 
-    def __init__(self, color, size):
+    def __init__(self, color: Tuple[int, int, int], size: float):
         self.color: Tuple[int, int, int] = color
         self.size: float = size
+
+    def __add__(self: "FlagStripe", other: "FlagStripe") -> "FlagStripe":
+        newsize = self.size + other.size
+        if self.color == other.color:
+            newcolor = self.color
+        else:
+            # average colors based on relative sizes
+            newcolor = ((self.color[i] * (self.size / newsize) + other.color[i] * (other.size / newsize)) / 2 for i in
+                        range(3))
+        return FlagStripe(newcolor, newsize)
 
     def split(self, times=2):
         return [FlagStripe(self.color, self.size / times)] * times
 
 
+class FlagImage:
+    def __init__(self, im: typing.Union[pyglet.sprite.Sprite, str], x: float = 0.5, y: float = 0.5, opacity: float = 1,
+                 scale: float = 1, f_type: typing.Literal["center", "left"] = "center"):
+        self.name = "Unknown"
+        if isinstance(im, pyglet.sprite.Sprite):
+            self.sprite = im
+        else:
+            self.name = im
+            pic = pyglet.image.load(im)
+            self.sprite = pyglet.sprite.Sprite(pic)
+        self.x = x
+        self.y = y
+        self.opacity = opacity
+        self.scale = scale
+        self.type = f_type
+
+    def __str__(self):
+        return f"<FlagImage name={self.name} type={self.type}>"
+
+    def prep_draw(self, batch: typing.Optional[pyglet.graphics.Batch] = None,
+                  group: typing.Optional[pyglet.graphics.Group] = None):
+        im2 = pyglet.sprite.Sprite(self.sprite.image, batch=batch, group=group)
+        im2.opacity = self.opacity
+        im2.scale = (window.height / self.sprite.height) * self.scale
+        im2.x = ((window.width - im2.width) // 2) + ((self.x - 0.5) * window.width)
+        im2.y = ((self.y - 0.5) * window.height)
+        return im2
+
+
 class Flag:
     def __str__(self):
-        return f"<Flag stripes={len(self)} name={self.name} images={len(self.images)}>"
+        return f"<Flag stripes={len(self)} name={self.name} images={self.images}>"
 
     def __len__(self):
         return len(self.stripes)
 
     def __init__(self, stripes: List[typing.Union[FlagStripe, tuple, str]],
-                 images: List[typing.Union[pyglet.sprite.Sprite, str]] = [], name: str = "unnamed", reverse=False):
+                 images: List[typing.Union[pyglet.sprite.Sprite, str, FlagImage]] = [], name: str = "unnamed",
+                 reverse=False,
+                 allow_stripes_to_combine=True):
         self.stripes: List[FlagStripe] = []
         for s in stripes:
             if isinstance(s, FlagStripe):
@@ -46,16 +93,23 @@ class Flag:
                     s = "#" + s
                 self.stripes.append(FlagStripe(webcolors.hex_to_rgb(s), 1 / len(stripes)))
             else:
-                raise Exception("what")
+                raise Exception(f"Stripe {s} is invalid")
+        if allow_stripes_to_combine:
+            combined_stripes = []
+            for stripe in self.stripes:
+                if combined_stripes and stripe.color == combined_stripes[-1].color:
+                    combined_stripes[-1] += stripe
+                else:
+                    combined_stripes.append(stripe)
+            self.stripes = combined_stripes
         if reverse:
             self.stripes.reverse()
-        self.images: List[pyglet.sprite.Sprite] = []
+        self.images: List[FlagImage] = []
         for im in images:
-            if isinstance(im, pyglet.sprite.Sprite):
+            if isinstance(im, FlagImage):
                 self.images.append(im)
             else:
-                pic = pyglet.image.load(im)
-                self.images.append(pyglet.sprite.Sprite(pic))
+                self.images.append(FlagImage(im))
         self.name: str = name
 
     def draw(self):
@@ -71,11 +125,7 @@ class Flag:
             current_height += window.height * fs.size
         sprites = []
         for im in self.images:
-            im2 = pyglet.sprite.Sprite(im.image, batch=batch, group=foreground)
-            im2.opacity = im.opacity
-            im2.scale = window.height / im.height
-            im2.x = (window.width - im2.width) // 2
-            sprites.append(im2)
+            sprites.append(im.prep_draw(batch, foreground))
         # print(self.images)
         batch.draw()
         # batch.invalidate()
@@ -94,7 +144,22 @@ class Flag:
                 new_stripes_to_add = 0
             else:
                 output.append(stripe)
-        return Flag(output, images=self.images, name=self.name)
+        return Flag(output, images=self.images, name=self.name, allow_stripes_to_combine=False)
+
+    def midpoint(self):
+        rolling_sum = 0
+        numstripes = 0
+        final_stripe_size = 0
+        for stripe in self.stripes:
+            if rolling_sum + stripe.size < .5:
+                rolling_sum += stripe.size
+                numstripes += 1
+            else:
+                final_stripe_size = stripe.size
+                break
+        # my brain hurts, but this returns the index of the stripe the midpoint is in
+        # and how high up it is (% from 0-1)
+        return numstripes, (.5 - rolling_sum) / final_stripe_size
 
 
 def transition(start: float, end: float, percent: float) -> float:
@@ -117,14 +182,28 @@ def transition_flags(flag1: Flag, flag2: Flag, percent: float) -> Flag:
         )
         newsize = transition(stripe1.size, stripe2.size, percent)
         outflag.append(FlagStripe(newcolors, newsize))
+    index_of_midpoint_2, height_of_midpoint_in_stripe_2 = flag2.midpoint()
+    height_of_midpoint_2 = sum([stripe.size for stripe in outflag[:index_of_midpoint_2]]) + \
+                           outflag[index_of_midpoint_2].size * height_of_midpoint_in_stripe_2
+    index_of_midpoint_1, height_of_midpoint_in_stripe_1 = flag1.midpoint()
+    height_of_midpoint_1 = sum([stripe.size for stripe in outflag[:index_of_midpoint_1]]) + \
+                           outflag[index_of_midpoint_1].size * height_of_midpoint_in_stripe_1
     images = []
     if flag1.images:
         for image in flag1.images:
             image.opacity = int(255 * (1 - percent))
+            if image.type == "center":
+                image.y = height_of_midpoint_1
+            elif image.type == "left":
+                image.x = transition(0.5, 0, percent)
             images.append(image)
     if flag2.images:
         for image in flag2.images:
             image.opacity = int(255 * percent)
+            if image.type == "center":
+                image.y = height_of_midpoint_2
+            elif image.type == "left":
+                image.x = transition(0, 0.5, percent)
             images.append(image)
     return Flag(outflag, images=images, name=f"{flag1.name}->{flag2.name} {round(percent * 100)}%")
 
@@ -191,14 +270,15 @@ flags = [
     Flag(["99c6e9", "ffffff", "99c6e9"], name="achillean", reverse=True, images=["achillean-flower.png"]),
     Flag(["ff76ae", "ffafd0", "c876ff", "b0d5ff", "77bcff"], name="xenogender", reverse=True),  # xenogender
     Flag(["ffffff", "ffffff", "6c016e", "d2d2d2", "d2d2d2"], name="demisexual", reverse=True,
-         images=["demisexual-triangle.png"]),
-
+         images=[FlagImage("demisexual-triangle.png", f_type="left")]),
 ]
 current_time = 0
 frame = 0
 print([str(f) for f in flags])
 time_to_transition = 1
 draw_flag = flags[0]
+if render and not os.path.isdir("render"):
+    os.mkdir("render")
 # pyglet.gl.glEnable(pyglet.gl.GL_BLEND)
 window.set_visible()
 pyglet.clock.schedule(update)

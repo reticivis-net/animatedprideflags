@@ -9,6 +9,7 @@ bezier = "*"
 seaborn = "*"
 sympy = "*"
 webcolors = "*"
+numpy = "*"
 
 [dev-packages]
 
