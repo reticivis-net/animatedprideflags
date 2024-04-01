@@ -222,7 +222,7 @@ def update(frame_delta):
         current_index -= len(flags)
     while next_index >= len(flags):
         next_index -= len(flags)
-    # print(current_index)
+    # print(current_index)mc
     current_flag = flags[current_index]
     next_flag = flags[next_index]
     percent_between_flags = current_time / time_to_transition % 1
@@ -234,7 +234,7 @@ def update(frame_delta):
     if render:
         current_time += 1.0 / RENDER_FPS
     else:
-        current_time += frame_delta
+        current_time += frame_delta # h
 
 
 @window.event
