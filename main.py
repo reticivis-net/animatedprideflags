@@ -9,10 +9,13 @@ import pyglet
 import sympy
 import webcolors
 
+SIZE = 250
+RENDER_FPS = 50
+
 # pyglet.gl.glEnable(pyglet.gl.GL_LINE_SMOOTH)
 pyglet.gl.glHint(pyglet.gl.GL_LINE_SMOOTH_HINT, pyglet.gl.GL_NICEST)
 config = pyglet.gl.Config(sample_buffers=1, samples=4)  #
-window = pyglet.window.Window(vsync=1, config=config, width=500, height=500, visible=False, resizable=True)
+window = pyglet.window.Window(vsync=1, config=config, width=SIZE, height=SIZE, visible=False, resizable=True)
 
 
 class FlagStripe:
@@ -113,8 +116,8 @@ class Flag:
         self.name: str = name
 
     def draw(self):
-        background = pyglet.graphics.OrderedGroup(0)
-        foreground = pyglet.graphics.OrderedGroup(1)
+        background = pyglet.graphics.Group(order=0)
+        foreground = pyglet.graphics.Group(order=1)
         batch = pyglet.graphics.Batch()
         shapes = []
         current_height = 0
@@ -229,7 +232,7 @@ def update(frame_delta):
         current_flag = current_flag.split(len(next_flag))
     draw_flag = transition_flags(current_flag, next_flag, percent_between_flags)
     if render:
-        current_time += 1.0 / 60
+        current_time += 1.0 / RENDER_FPS
     else:
         current_time += frame_delta
 
